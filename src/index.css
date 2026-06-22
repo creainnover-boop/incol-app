@@ -40,17 +40,23 @@ html, body, #root {
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-size: 16px; /* base para móvil */
 }
 
 body {
   overflow-x: hidden;
 }
 
+/* En móvil ocupa todo el ancho */
+@media (max-width: 480px) {
+  html { font-size: 16px; }
+  input, select, textarea, button { font-size: 16px !important; } /* evita zoom en iOS */
+}
+
 input, select, textarea, button {
   font-family: var(--font-sans);
 }
 
-/* Scrollbar sutil */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border-secondary); border-radius: 2px; }

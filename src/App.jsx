@@ -24,35 +24,33 @@ const ATESTADORES = ["DIEGO SUAREZ","ALEJANDRO FRANCO"];
 // puertas: LUX, EPL, DNM, FLEX                  (SIN tacómetro, SIN EPT, SIN MAD, SIN pie de rey)
 const EQUIPOS_POR_TIPO = {
   asc2012: [
-    { k:"tac",  nombre:"Tacómetro",              items:"94" },
-    { k:"mad",  nombre:"Medidor ángulo digital",  items:"94, 77" },
-    { k:"epl",  nombre:"Escala plana",            items:"77, 130, 134" },
-    { k:"ept",  nombre:"Escala punta",            items:"133, 134" },
-    { k:"pdr",  nombre:"Pie de rey",              items:"111, 130" },
-    { k:"flex", nombre:"Flexómetro",              items:"130, 131, 132, 133" },
-    { k:"lux",  nombre:"Luxómetro",               items:"79, 168" },
+    { k:"tac",  nombre:"Tacómetro",             items:"94" },
+    { k:"mad",  nombre:"Medidor ángulo digital", items:"77" },
+    { k:"epl",  nombre:"Escala plana",           items:"133, 130, 134" },
+    { k:"lux",  nombre:"Luxómetro",              items:"168, 79" },
+    { k:"flex", nombre:"Flexómetro",             items:"131" },
+    { k:"pdr",  nombre:"Pie de rey",             items:"111" },
   ],
   asc2021: [
-    { k:"flex", nombre:"Flexómetro",              items:"4, 14, 24, 30, 111, 132" },
-    { k:"lux",  nombre:"Luxómetro",               items:"23, 137" },
-    { k:"tac",  nombre:"Tacómetro",               items:"99" },
-    { k:"epl",  nombre:"Escala plana",            items:"7, 132" },
-    { k:"ept",  nombre:"Escala punta",            items:"14, 132" },
-    { k:"mad",  nombre:"Medidor ángulo digital",  items:"69, 102" },
-    { k:"pdr",  nombre:"Pie de rey",              items:"34, 111, 112" },
+    { k:"epl",  nombre:"Escala plana",           items:"4, 14, 30, 11, 32" },
+    { k:"lux",  nombre:"Luxómetro",              items:"23, 137" },
+    { k:"flex", nombre:"Flexómetro",             items:"7, 24, 52, 102, 112" },
+    { k:"pdr",  nombre:"Pie de rey",             items:"34" },
+    { k:"mad",  nombre:"Medidor ángulo digital", items:"69" },
+    { k:"tac",  nombre:"Tacómetro",              items:"99" },
   ],
   escram: [
-    { k:"tac",  nombre:"Tacómetro",              items:"19, 20, 21, 91, 92, 93" },
     { k:"mad",  nombre:"Medidor ángulo digital", items:"11, 12" },
+    { k:"tac",  nombre:"Tacómetro",              items:"19, 20, 21" },
     { k:"ept",  nombre:"Escala punta",           items:"31" },
     { k:"lux",  nombre:"Luxómetro",              items:"77, 78" },
-    { k:"flex", nombre:"Flexómetro",             items:"31" },
+    { k:"flex", nombre:"Flexómetro",             items:"91, 92" },
+    { k:"mtm",  nombre:"Multímetro",             items:"93" },
   ],
   puertas: [
-    { k:"lux",  nombre:"Luxómetro",   items:"81" },
-    { k:"epl",  nombre:"Escala plana",items:"5" },
-    { k:"dnm",  nombre:"Dinamómetro", items:"76" },
-    { k:"flex", nombre:"Flexómetro",  items:"5" },
+    { k:"flex", nombre:"Flexómetro",             items:"5" },
+    { k:"dnm",  nombre:"Dinamómetro",            items:"76" },
+    { k:"lux",  nombre:"Luxómetro",              items:"81" },
   ],
 };
 const CIUDADES = ["PEREIRA","BOGOTA","CALI","MEDELLIN","BUCARAMANGA","BARRANQUILLA","MANIZALES","ARMENIA","JAMUNDI","OTRO"];
@@ -388,11 +386,13 @@ const TecnicaScreen = ({ onBack, onNext, tipo }) => {
 };
 
 // ─── PANTALLA: ITEMS ─────────────────────────────────────────────────────────
+// Flujo optimizado: inspector solo marca NC y NA adicionales.
+// Al presionar "Finalizar", los ítems sin marcar (que no son NA por defecto) pasan a C automáticamente.
 const ItemsScreen = ({ onBack, onNext, tipo, tecnica }) => {
   const [estados, setEstados] = useState({});
   const [obs, setObs] = useState({});
   const [fotos, setFotos] = useState({});
-  const [filtro, setFiltro] = useState("todos");
+  const [filtro, setFiltro] = useState("nc_na"); // Vista por defecto: solo NC y NA
 
   const items = useMemo(() => {
     const base = RAW[tipo] || [];
@@ -403,7 +403,6 @@ const ItemsScreen = ({ onBack, onNext, tipo, tecnica }) => {
           const sinCuarto = tecnica.cuarto === "SIN CUARTO";
           const conPoleas = tecnica.poleas === "SI";
           const hidraulico = tecnica.accionamiento === "HIDRAULICO";
-          const conContrapeso = tecnica.limContrapeso === "SI";
           if ([43,44,45,46,47].includes(item.n) && tecnica.escotilla === "NO") naFinal = true;
           if ([48,49].includes(item.n) && !conPoleas) naFinal = true;
           if (item.n === 50 && tecnica.maquina !== "GEAR") naFinal = true;
@@ -418,66 +417,98 @@ const ItemsScreen = ({ onBack, onNext, tipo, tecnica }) => {
     });
   }, [tipo, tecnica]);
 
-  const total = items.length;
-  const done = items.filter(i => estados[i.n]).length;
-  const hallazgos = items.filter(i => estados[i.n] === "NC").length;
-  const pct = Math.round(done / total * 100);
-  const naCount = items.filter(i => estados[i.n] === "NA" || (i.naFinal && !estados[i.n])).length;
+  // Estado efectivo de cada ítem
+  const getE = (item) => {
+    if (estados[item.n]) return estados[item.n];
+    if (item.naFinal) return "NA";
+    return ""; // pendiente = cumple al finalizar
+  };
 
-  const setE = (n, e) => setEstados(p => ({ ...p, [n]: e }));
-  const showItems = filtro === "todos" ? items : filtro === "nc" ? items.filter(i => estados[i.n] === "NC") : items.filter(i => !estados[i.n]);
+  const ncCount = items.filter(i => getE(i) === "NC").length;
+  const naCount = items.filter(i => getE(i) === "NA").length;
+  const naAdicional = items.filter(i => !i.naFinal && estados[i.n] === "NA").length;
+  const total = items.length;
+
+  const setE = (n, e, item) => {
+    // Si el ítem ya era NA por defecto y se quiere desmarcar, lo dejamos sin estado
+    setEstados(p => ({ ...p, [n]: e }));
+  };
+
+  // Filtros
+  const showItems = useMemo(() => {
+    if (filtro === "todos") return items;
+    if (filtro === "nc") return items.filter(i => getE(i) === "NC");
+    if (filtro === "nc_na") return items.filter(i => !i.naFinal); // solo los que aplican
+    return items;
+  }, [filtro, items, estados]);
+
+  // Al finalizar: los sin marcar que no son NA pasan a C
+  const handleFinalizar = () => {
+    const estadosFinal = { ...estados };
+    items.forEach(item => {
+      if (!estadosFinal[item.n]) {
+        estadosFinal[item.n] = item.naFinal ? "NA" : "C";
+      }
+    });
+    onNext({ estados: estadosFinal, obs, fotos, items });
+  };
 
   return (
     <div style={{ display:"flex",flexDirection:"column",flex:1 }}>
       <TopBar title="Lista de verificación" sub="4/5" onBack={onBack} />
       <div style={{ padding:"10px 16px",borderBottom:"0.5px solid var(--color-border-tertiary)",flexShrink:0 }}>
-        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6 }}>
-          <span style={{ fontSize:12,color:"var(--color-text-secondary)" }}>Progreso: <strong>{done} / {total}</strong></span>
-          <span style={{ fontSize:12,color:"#A32D2D",fontWeight:500 }}>{hallazgos} hallazgo{hallazgos!==1?"s":""}</span>
+        {/* Resumen rápido */}
+        <div style={{ display:"flex",gap:8,marginBottom:8,flexWrap:"wrap" }}>
+          <span style={{ fontSize:12,fontWeight:500,color:"#A32D2D",background:"#FCEBEB",padding:"3px 10px",borderRadius:99 }}>✗ {ncCount} No cumplen</span>
+          <span style={{ fontSize:12,fontWeight:500,color:"var(--color-text-secondary)",background:"var(--color-background-secondary)",padding:"3px 10px",borderRadius:99 }}>— {naCount} No aplica</span>
+          {naAdicional > 0 && <span style={{ fontSize:11,color:"#185FA5" }}>({naAdicional} NA adicionales)</span>}
         </div>
-        <div style={{ height:4,background:"var(--color-background-secondary)",borderRadius:2,overflow:"hidden" }}>
-          <div style={{ height:"100%",background:"#1a3a5c",borderRadius:2,width:pct+"%",transition:"width .3s" }} />
-        </div>
-        <div style={{ marginTop:8,display:"flex",gap:6,flexWrap:"wrap" }}>
-          <Tag label={TIPO_LABELS[tipo]} color="blue" />
-          <Tag label={`${naCount} no aplica`} color="gray" />
-        </div>
-        <div style={{ display:"flex",gap:6,marginTop:8 }}>
-          {[["todos","Todos"],["nc","No cumplen"],["pend","Pendientes"]].map(([k,l])=>(
-            <button key={k} onClick={()=>setFiltro(k)} style={{ flex:1,padding:"5px 4px",fontSize:11,borderRadius:8,border:filtro===k?"0.5px solid #185FA5":"0.5px solid var(--color-border-secondary)",cursor:"pointer",background:filtro===k?"#E6F1FB":"var(--color-background-secondary)",color:filtro===k?"#0C447C":"var(--color-text-secondary)",fontWeight:filtro===k?500:400 }}>{l}</button>
+        <div style={{ display:"flex",gap:6 }}>
+          {[["nc_na","Ítems que aplican"],["nc","Solo hallazgos"],["todos","Ver todos"]].map(([k,l])=>(
+            <button key={k} onClick={()=>setFiltro(k)} style={{ flex:1,padding:"5px 2px",fontSize:10,borderRadius:8,border:filtro===k?"0.5px solid #185FA5":"0.5px solid var(--color-border-secondary)",cursor:"pointer",background:filtro===k?"#E6F1FB":"var(--color-background-secondary)",color:filtro===k?"#0C447C":"var(--color-text-secondary)",fontWeight:filtro===k?500:400 }}>{l}</button>
           ))}
+        </div>
+        <div style={{ marginTop:8,fontSize:11,color:"var(--color-text-secondary)",background:"#E6F1FB",borderRadius:8,padding:"6px 10px" }}>
+          💡 Marca solo los ítems que <strong>No cumplen</strong> o <strong>No aplican</strong> adicionalmente. Al finalizar, los demás quedan como Cumple automáticamente.
         </div>
       </div>
       <div style={{ flex:1,overflowY:"auto",padding:"0 16px 16px" }}>
         {showItems.map(item => {
-          const e = estados[item.n] || (item.naFinal ? "NA" : "");
+          const e = getE(item);
           const ds = DEFE_STYLES[item.f] || DEFE_STYLES.G;
+          const esNAdefecto = item.naFinal && !estados[item.n];
           return (
-            <div key={item.n} style={{ padding:"12px 0",borderBottom:"0.5px solid var(--color-border-tertiary)" }}>
+            <div key={item.n} style={{ padding:"12px 0",borderBottom:"0.5px solid var(--color-border-tertiary)",opacity: esNAdefecto ? 0.5 : 1 }}>
               <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
-                <span style={{ fontSize:11,color:"var(--color-text-secondary)" }}>Ítem {item.n}</span>
+                <span style={{ fontSize:11,color:"var(--color-text-secondary)" }}>Ítem {item.n} {esNAdefecto?"· N/A por defecto":""}</span>
                 <span style={{ fontSize:10,fontWeight:500,padding:"2px 7px",borderRadius:99,background:ds.bg,color:ds.color }}>{ds.label}</span>
               </div>
               <div style={{ fontSize:12,color:"var(--color-text-primary)",lineHeight:1.45,margin:"4px 0" }}>{item.d}</div>
               <div style={{ display:"flex",gap:6,marginTop:6 }}>
-                {[["C","✓ Cumple","#EAF3DE","#27500A","#639922"],["NC","✗ No cumple","#FCEBEB","#791F1F","#E24B4A"],["NA","— N/A","var(--color-background-secondary)","var(--color-text-secondary)","var(--color-border-secondary)"]].map(([k,l,bg,fg,bc])=>(
-                  <button key={k} onClick={()=>setE(item.n,k)} style={{ flex:1,padding:"7px 4px",fontSize:12,borderRadius:8,border:`0.5px solid ${e===k?bc:"var(--color-border-secondary)"}`,cursor:"pointer",background:e===k?bg:"var(--color-background-secondary)",color:e===k?fg:"var(--color-text-secondary)",fontWeight:e===k?500:400 }}>{l}</button>
-                ))}
+                <button onClick={()=>setE(item.n,"NC",item)} style={{ flex:2,padding:"8px 4px",fontSize:12,borderRadius:8,border:e==="NC"?"1.5px solid #E24B4A":"0.5px solid var(--color-border-secondary)",cursor:"pointer",background:e==="NC"?"#FCEBEB":"var(--color-background-secondary)",color:e==="NC"?"#791F1F":"var(--color-text-secondary)",fontWeight:e==="NC"?600:400 }}>✗ No cumple</button>
+                <button onClick={()=>setE(item.n, estados[item.n]==="NA" ? (item.naFinal?"NA":undefined) : "NA", item)} style={{ flex:1,padding:"8px 4px",fontSize:12,borderRadius:8,border:e==="NA"?"1.5px solid #1a3a5c":"0.5px solid var(--color-border-secondary)",cursor:"pointer",background:e==="NA"?"#E6F1FB":"var(--color-background-secondary)",color:e==="NA"?"#0C447C":"var(--color-text-secondary)",fontWeight:e==="NA"?600:400 }}>— N/A</button>
               </div>
               {e==="NC" && (
                 <div style={{ background:"#FFF9F0",border:"0.5px solid #FAC775",borderRadius:8,padding:10,marginTop:8,display:"flex",flexDirection:"column",gap:6 }}>
                   <div style={{ fontSize:11,color:"#633806",fontWeight:500 }}>⚠ Hallazgo — observación y evidencia</div>
-                  <textarea value={obs[item.n]||""} onChange={e=>setObs(p=>({...p,[item.n]:e.target.value}))} placeholder="Describe el hallazgo encontrado..." style={{ ...inputStyle,height:56,fontSize:12,resize:"none" }} />
-                  <button onClick={()=>setFotos(p=>({...p,[item.n]:(p[item.n]||0)+1}))} style={{ display:"flex",alignItems:"center",gap:6,border:"0.5px dashed var(--color-border-secondary)",borderRadius:8,padding:"8px 10px",cursor:"pointer",background:"var(--color-background-secondary)",fontSize:12,color:"var(--color-text-secondary)",width:"100%" }}>
-                    📷 Agregar foto {fotos[item.n]?`(${fotos[item.n]} foto${fotos[item.n]!==1?"s":""})`:""} 
-                  </button>
+                  <textarea value={obs[item.n]||""} onChange={ev=>setObs(p=>({...p,[item.n]:ev.target.value}))} placeholder="Describe el hallazgo encontrado..." style={{ ...inputStyle,height:56,fontSize:12,resize:"none" }} />
+                  <label style={{ display:"flex",alignItems:"center",gap:6,border:"0.5px dashed var(--color-border-secondary)",borderRadius:8,padding:"8px 10px",cursor:"pointer",background:"var(--color-background-secondary)",fontSize:12,color:"var(--color-text-secondary)",width:"100%" }}>
+                    📷 {fotos[item.n]?`${fotos[item.n].length} foto(s) agregada(s)`:"Agregar foto del hallazgo"}
+                    <input type="file" accept="image/*" capture="environment" multiple style={{ display:"none" }} onChange={ev=>{
+                      const files = Array.from(ev.target.files);
+                      setFotos(p=>({...p,[item.n]:[...(p[item.n]||[]),...files]}));
+                    }} />
+                  </label>
                 </div>
               )}
             </div>
           );
         })}
-        <div style={{ paddingTop:12 }}>
-          <BtnPrimary onClick={()=>onNext({ estados, obs, fotos, items })}>Equipos de medición →</BtnPrimary>
+        <div style={{ paddingTop:16,display:"flex",flexDirection:"column",gap:8 }}>
+          <div style={{ fontSize:12,color:"var(--color-text-secondary)",textAlign:"center",padding:"8px 0" }}>
+            Al continuar, los ítems sin marcar quedarán como <strong>Cumple</strong> automáticamente.
+          </div>
+          <BtnPrimary onClick={handleFinalizar}>✓ Finalizar y pasar a equipos de medición →</BtnPrimary>
         </div>
       </div>
     </div>
@@ -506,9 +537,10 @@ const EquiposScreen = ({ onBack, onNext, inspector, tipo }) => {
                 <div style={{ fontSize:11,color:"var(--color-text-secondary)",marginTop:1 }}>{eq[e.k] || "—"}</div>
                 <div style={{ fontSize:11,color:"#185FA5",marginTop:2 }}>Ítems: {e.items}</div>
               </div>
-              <button onClick={()=>setFotos(p=>({...p,[e.k]:true}))} style={{ width:48,height:48,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer",border:fotos[e.k]?"0.5px solid #639922":"0.5px dashed var(--color-border-secondary)",background:fotos[e.k]?"#EAF3DE":"var(--color-background-secondary)",fontSize:fotos[e.k]?18:20,color:fotos[e.k]?"#27500A":"var(--color-text-secondary)" }}>
+              <label style={{ width:48,height:48,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer",border:fotos[e.k]?"0.5px solid #639922":"0.5px dashed var(--color-border-secondary)",background:fotos[e.k]?"#EAF3DE":"var(--color-background-secondary)",fontSize:fotos[e.k]?18:20,color:fotos[e.k]?"#27500A":"var(--color-text-secondary)" }}>
                 {fotos[e.k]?"✓":"📷"}
-              </button>
+                <input type="file" accept="image/*" capture="environment" style={{ display:"none" }} onChange={()=>setFotos(p=>({...p,[e.k]:true}))} />
+              </label>
             </div>
           ))}
         </Card>
@@ -769,8 +801,8 @@ export default function App() {
   };
 
   return (
-    <div style={{ background:"var(--color-background-secondary)",borderRadius:12,padding:12,display:"flex",justifyContent:"center" }}>
-      <div style={{ width:360,background:"var(--color-background-primary)",borderRadius:16,border:"0.5px solid var(--color-border-tertiary)",overflow:"hidden",minHeight:600,display:"flex",flexDirection:"column" }}>
+    <div style={{ background:"var(--color-background-secondary)",minHeight:"100vh",display:"flex",justifyContent:"center",alignItems:"flex-start" }}>
+      <div style={{ width:"100%",maxWidth:480,background:"var(--color-background-primary)",minHeight:"100vh",display:"flex",flexDirection:"column" }}>
         {screens[screen] || screens.home}
       </div>
     </div>
